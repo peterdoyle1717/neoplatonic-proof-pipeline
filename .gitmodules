@@ -1,12 +1,12 @@
 [submodule "submodules/clers"]
 	path = submodules/clers
-	url = ../clers
+	url = git@github.com:peterdoyle1717/clers.git
 [submodule "submodules/primegen"]
 	path = submodules/primegen
-	url = ../primegen
+	url = https://github.com/peterdoyle1717/primegen.git
 [submodule "submodules/euclid_prover"]
 	path = submodules/euclid_prover
-	url = ../euclid_prover
+	url = git@github.com:peterdoyle1717/euclid_prover.git
 [submodule "submodules/euclid_lm"]
 	path = submodules/euclid_lm
-	url = ../euclid_lm
+	url = https://github.com/peterdoyle1717/euclid_lm.git
