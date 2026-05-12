@@ -1,0 +1,9 @@
+[submodule "submodules/clers"]
+	path = submodules/clers
+	url = ../clers
+[submodule "submodules/primegen"]
+	path = submodules/primegen
+	url = ../primegen
+[submodule "submodules/euclid_prover"]
+	path = submodules/euclid_prover
+	url = ../euclid_prover

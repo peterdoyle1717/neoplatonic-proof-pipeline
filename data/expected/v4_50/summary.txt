@@ -1,0 +1,20 @@
+range: v=4..50
+expected total cases: 8,239,684
+OBJ count: 8,239,684
+molasses input count: 8,239,684
+molasses result rows: 8,239,684
+ACCEPT: 8,239,152
+REJECT: 532
+failures file: 532 data rows
+
+official OBJ dir on doob:
+  /home/doyle/neo/data/official_lm_sparse_objs_v4_50_20260509T004116Z
+molasses run dir on doob:
+  /home/doyle/neo/data/molasses_official_lm_v4_50_20260509T011806Z
+
+OBJ-gen mode:  objs-out-root (LM solve + realize, no check, no prover)
+OBJ-gen wall: 36:31.02; exit 0
+molasses wall: 38:07:01; exit 0; nice 19; 96 workers
+prover_md5 (Linux build on doob): e376582e604a39b57291c40609d48f5f
+
+audit:  V4_50_PROOF_AUDIT.md (in this directory)
