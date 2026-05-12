@@ -43,26 +43,36 @@ this reproducibility pipeline:
 
 ## euclid_lm extraction (done 2026-05-11)
 
-- **Source:** `~/Dropbox/neo/euclid_lm/`, initial commit `6acc811`.
+- **Source repo:** `~/Dropbox/neo/euclid_lm/`.  Pipeline submodule pin
+  follows that repo's `main` branch.
 - **Origin:** extracted from `~/Dropbox/neo/orchestrator/tools/euclid_oneshot/`
-  **working tree** state on 2026-05-11 (not orchestrator HEAD `13ef4fd`, which
-  predates the `--objs-out-root` flag the reference run depended on).
+  **working tree** state on 2026-05-11 (not orchestrator HEAD `13ef4fd`,
+  which predates the `--objs-out-root` flag the reference run depended on).
+- **Trim:** the initial extraction kept the orchestrator's full triage
+  binary (LM + euclid_check + float-prover); a follow-up commit on euclid_lm
+  trimmed that to the minimal OBJ producer (LM-sparse + realize + OBJ
+  writer only).  Binary name: `bin/euclid_lm`.  CLI:
+  `--input-list FILE --objs-out-root DIR`.
 - **Provenance caveat for v=4..50 reference run.** The doob OBJ-generation
-  manifest records `git_rev_orchestrator=53b50c8` — which is even earlier than
-  `13ef4fd`.  Sources used by the run lived only in the orchestrator working
-  tree at launch time.  Files copied into `euclid_lm` are the working-tree
-  state as observed locally on 2026-05-11 — this is the closest captured
-  approximation; a doob-side `md5sum` of source files at the time of the
-  reference build would be needed to certify byte-equivalence.
-- **What was kept:** `src/euclid_oneshot.c`, `src/lm_march.c`,
-  `src/euclid_prover_float.c`, `src/euclid_check/*` (vendored), Makefile,
-  `scripts/run_doob_vrange.sh`, `docs/v4_50_run.md`.
+  manifest records `git_rev_orchestrator=53b50c8` — earlier than `13ef4fd`.
+  Sources used by the run lived only in the orchestrator working tree at
+  launch time.  The OBJ-emission code path (CLERS decoder + realize +
+  write_obj + LM solve) was byte-copied into `euclid_lm/src/euclid_lm.c`
+  from the orchestrator working tree on 2026-05-11.  The CCAE v=4 OBJ
+  produced by the trimmed `bin/euclid_lm` byte-matches the prior
+  `bin/euclid_oneshot --objs-out-root` output on the same CLERS, confirming
+  the kept code is functionally unchanged.  A doob-side `md5sum` of
+  orchestrator source files at the time of the reference build would be
+  needed to certify byte-equivalence to the production binary's source.
 - **What was dropped (belongs elsewhere):**
-  - `data/failures_4_50*.tsv` — historical float-prover output; the pipeline
-    keeps the rigorous molasses failure list in `data/expected/v4_50/`.
-  - `scripts/{molasses_chunk_worker.sh, follow_molasses_when_objs_done.sh}` —
-    molasses orchestration lives in this repo's `scripts/`, not in the
-    solver.
+  - `data/failures_4_50*.tsv` — historical float-prover output; the
+    pipeline keeps the rigorous molasses failure list in
+    `data/expected/v4_50/`.
+  - `scripts/{molasses_chunk_worker.sh, follow_molasses_when_objs_done.sh}`
+    — molasses orchestration belongs in this repo's `scripts/`, not in
+    the solver.
+  - `src/euclid_prover_float.c`, `src/euclid_check/*` — the in-memory
+    triage stage; the rigorous prover lives in its own submodule.
 
 ## Realizer placement
 

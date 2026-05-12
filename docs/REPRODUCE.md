@@ -6,9 +6,8 @@
 - SuperLU, BLAS (OpenBLAS recommended), LAPACK headers + libs.
   - macOS: `brew install superlu` for SuperLU; BLAS/LAPACK via Accelerate.
   - Debian/Ubuntu: `apt install libsuperlu-dev libopenblas-dev liblapack-dev`.
-- `euclid_lm` is not yet a clean submodule — see
-  [`ARCHITECTURE.md`](ARCHITECTURE.md).  For now you must point at the
-  in-tree copy at `~/Dropbox/neo/orchestrator/tools/euclid_oneshot/`.
+- `euclid_lm` is a tracked submodule; `make -C submodules/euclid_lm`
+  builds `submodules/euclid_lm/bin/euclid_lm`.
 
 ## Quick path
 
@@ -55,7 +54,7 @@ Each script:
 | `NEO_WORKERS`          | 96 on doob, `nproc/2` on laptops | parallel worker count |
 | `NEO_NICE`             | 19 on doob, unset on laptop | `nice -n` level |
 | `OPENBLAS_NUM_THREADS` | 1       | BLAS thread oversubscription guard |
-| `EUCLID_LM_BIN`        | (must be set, see ARCHITECTURE) | path to the `euclid_oneshot` binary |
+| `EUCLID_LM_BIN`        | `submodules/euclid_lm/bin/euclid_lm` | path to the `euclid_lm` binary |
 | `EUCLID_PROVER_BIN`    | `submodules/euclid_prover/src/euclid_prover` | path to the rigorous prover |
 
 ## doob notes
