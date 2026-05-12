@@ -13,8 +13,8 @@
 #   OUT_OBJ_DIR/run.stderr     (GNU time)
 #
 # Env knobs:
-#   EUCLID_LM_BIN          path to the euclid_lm binary
-#                          (default: submodules/euclid_lm/bin/euclid_lm).
+#   EUCLID_LM_BIN          path to the euclid_lm/euclid_oneshot binary
+#                          (default: submodules/euclid_lm/bin/euclid_oneshot).
 #   NEO_WORKERS            parallel worker count, default 96 on doob, 4 elsewhere.
 #   NEO_NICE               nice -n level, default 19.
 #   OPENBLAS_NUM_THREADS   default 1 (propagated to workers).
@@ -29,13 +29,13 @@ fi
 PRIMES_DIR="$1"; OUT_OBJ_DIR="$2"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-EUCLID_LM_BIN="${EUCLID_LM_BIN:-$ROOT/submodules/euclid_lm/bin/euclid_lm}"
+EUCLID_LM_BIN="${EUCLID_LM_BIN:-$ROOT/submodules/euclid_lm/bin/euclid_oneshot}"
 [ -x "$EUCLID_LM_BIN" ] || { echo "[generate_objs] not executable: $EUCLID_LM_BIN" >&2; exit 2; }
 
 mkdir -p "$OUT_OBJ_DIR/objs" "$OUT_OBJ_DIR/chunks"
 
 # Concatenate CLERS strings as `clers\n` from PRIMES_DIR/v*.txt.
-# (euclid_lm --input-list expects bare CLERS lines.)
+# (euclid_oneshot --input-list expects bare CLERS lines.)
 ALL_CLERS="$OUT_OBJ_DIR/all_clers.txt"
 : > "$ALL_CLERS"
 for f in "$PRIMES_DIR"/v*.txt; do
@@ -79,8 +79,8 @@ fi
     echo "pipeline_commit=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 } > "$OUT_OBJ_DIR/manifest.txt"
 
-CMD_TEMPLATE='%s --input-list {} --objs-out-root %s/objs'
-printf "$CMD_TEMPLATE\n" "$EUCLID_LM_BIN" "$OUT_OBJ_DIR" > "$OUT_OBJ_DIR/commands.txt"
+CMD_TEMPLATE='%s --input-list {} --out-dir %s --objs-out-root %s/objs'
+printf "$CMD_TEMPLATE\n" "$EUCLID_LM_BIN" "$OUT_OBJ_DIR" "$OUT_OBJ_DIR" > "$OUT_OBJ_DIR/commands.txt"
 
 # Run.  Prefer GNU parallel + /usr/bin/time -v (doob); fall back to serial
 # loop when those aren't present (laptop smoke).
@@ -89,11 +89,13 @@ if command -v parallel >/dev/null 2>&1; then
         /usr/bin/time -v -o "$OUT_OBJ_DIR/run.stderr" \
             parallel --nice "$NICE" -j "$WORKERS" --env OPENBLAS_NUM_THREADS --will-cite \
                 "$EUCLID_LM_BIN" --input-list {} \
+                    --out-dir "$OUT_OBJ_DIR" \
                     --objs-out-root "$OUT_OBJ_DIR/objs" \
                 ::: "$OUT_OBJ_DIR"/chunks/chunk_*
     else
         parallel --nice "$NICE" -j "$WORKERS" --env OPENBLAS_NUM_THREADS --will-cite \
             "$EUCLID_LM_BIN" --input-list {} \
+                --out-dir "$OUT_OBJ_DIR" \
                 --objs-out-root "$OUT_OBJ_DIR/objs" \
             ::: "$OUT_OBJ_DIR"/chunks/chunk_* \
             2> "$OUT_OBJ_DIR/run.stderr"
@@ -103,6 +105,7 @@ else
     : > "$OUT_OBJ_DIR/run.stderr"
     for c in "$OUT_OBJ_DIR"/chunks/chunk_*; do
         "$EUCLID_LM_BIN" --input-list "$c" \
+            --out-dir "$OUT_OBJ_DIR" \
             --objs-out-root "$OUT_OBJ_DIR/objs" 2>> "$OUT_OBJ_DIR/run.stderr"
     done
 fi

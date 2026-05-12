@@ -48,20 +48,18 @@ this reproducibility pipeline:
 - **Origin:** extracted from `~/Dropbox/neo/orchestrator/tools/euclid_oneshot/`
   **working tree** state on 2026-05-11 (not orchestrator HEAD `13ef4fd`,
   which predates the `--objs-out-root` flag the reference run depended on).
-- **Trim:** the initial extraction kept the orchestrator's full triage
-  binary (LM + euclid_check + float-prover); a follow-up commit on euclid_lm
-  trimmed that to the minimal OBJ producer (LM-sparse + realize + OBJ
-  writer only).  Binary name: `bin/euclid_lm`.  CLI:
-  `--input-list FILE --objs-out-root DIR`.
+- **Wholesale, not minimal.** The extraction copies the orchestrator's
+  full working-tree contents verbatim (LM solver + in-memory check +
+  float-prover triage path).  Binary name kept as `bin/euclid_oneshot`
+  (the original).  CLI: `--input-list FILE --out-dir DIR [--chunk-id NAME]
+  [--objs-out-root DIR]`.  In `--objs-out-root` mode the binary writes
+  the OBJ and returns before the check/prover stages, so they are dead
+  code in the pipeline's use of the binary; we kept them anyway for
+  source fidelity to what doob actually compiled.
 - **Provenance caveat for v=4..50 reference run.** The doob OBJ-generation
   manifest records `git_rev_orchestrator=53b50c8` — earlier than `13ef4fd`.
   Sources used by the run lived only in the orchestrator working tree at
-  launch time.  The OBJ-emission code path (CLERS decoder + realize +
-  write_obj + LM solve) was byte-copied into `euclid_lm/src/euclid_lm.c`
-  from the orchestrator working tree on 2026-05-11.  The CCAE v=4 OBJ
-  produced by the trimmed `bin/euclid_lm` byte-matches the prior
-  `bin/euclid_oneshot --objs-out-root` output on the same CLERS, confirming
-  the kept code is functionally unchanged.  A doob-side `md5sum` of
+  launch time, which is what we copied.  A doob-side `md5sum` of
   orchestrator source files at the time of the reference build would be
   needed to certify byte-equivalence to the production binary's source.
 - **What was dropped (belongs elsewhere):**
@@ -71,8 +69,9 @@ this reproducibility pipeline:
   - `scripts/{molasses_chunk_worker.sh, follow_molasses_when_objs_done.sh}`
     — molasses orchestration belongs in this repo's `scripts/`, not in
     the solver.
-  - `src/euclid_prover_float.c`, `src/euclid_check/*` — the in-memory
-    triage stage; the rigorous prover lives in its own submodule.
+
+  Source-level contents (LM solver + check vendored + float-prover) are
+  preserved verbatim from the orchestrator working tree.
 
 ## Realizer placement
 
