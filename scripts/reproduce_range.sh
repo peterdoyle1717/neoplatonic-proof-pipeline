@@ -64,8 +64,8 @@ COMPARE_LOG="$OUT/compare.txt"
 if [ "$VMIN" = "4" ] && [ "$VMAX" = "50" ] && [ -f "$EXPECTED" ]; then
     EXP_CLERS="$OUT/_expected_clers.txt"
     GOT_CLERS="$OUT/_produced_clers.txt"
-    awk -F'\t' '!/^#/ && NR>1 {print $1"\t"$2}' "$EXPECTED"      | sort > "$EXP_CLERS"
-    awk -F'\t' '!/^#/ && NR>1 {print $1"\t"$2}' "$OUT/failures.tsv" | sort > "$GOT_CLERS"
+    awk -F'\t' '$1 ~ /^[0-9]+$/ {print $1"\t"$2}' "$EXPECTED"        | sort > "$EXP_CLERS"
+    awk -F'\t' '$1 ~ /^[0-9]+$/ {print $1"\t"$2}' "$OUT/failures.tsv" | sort > "$GOT_CLERS"
     n_exp=$(wc -l < "$EXP_CLERS"  | tr -d ' ')
     n_got=$(wc -l < "$GOT_CLERS"  | tr -d ' ')
     n_only_exp=$(comm -23 "$EXP_CLERS" "$GOT_CLERS" | wc -l | tr -d ' ')
