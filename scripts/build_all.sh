@@ -25,19 +25,11 @@ build_one clers
 build_one primegen
 build_one euclid_prover
 
-if [ -d "$ROOT/submodules/euclid_lm" ]; then
-    build_one euclid_lm
-else
-    if [ -z "${EUCLID_LM_BIN:-}" ]; then
-        echo "[build_all] submodules/euclid_lm not present and EUCLID_LM_BIN not set." >&2
-        echo "[build_all] See docs/ARCHITECTURE.md (COMPONENT NOT YET CLEAN: euclid_lm)." >&2
-        echo "[build_all] Workaround for now: point EUCLID_LM_BIN at the in-tree" >&2
-        echo "[build_all] orchestrator copy:" >&2
-        echo "    EUCLID_LM_BIN=~/Dropbox/neo/orchestrator/tools/euclid_oneshot/bin/euclid_oneshot" >&2
-        exit 2
-    fi
-    echo "[build_all] using pre-built EUCLID_LM_BIN=$EUCLID_LM_BIN"
-    [ -x "$EUCLID_LM_BIN" ] || { echo "[build_all] not executable: $EUCLID_LM_BIN" >&2; exit 2; }
+if [ ! -d "$ROOT/submodules/euclid_lm" ]; then
+    echo "[build_all] submodules/euclid_lm not present." >&2
+    echo "[build_all] Run 'git submodule update --init --recursive' first." >&2
+    exit 2
 fi
+build_one euclid_lm
 
 echo "[build_all] done"
