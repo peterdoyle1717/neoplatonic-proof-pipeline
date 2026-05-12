@@ -63,7 +63,17 @@ NICE="${NEO_NICE:-19}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
 
 # Split into N chunks for one process per chunk (NOT per CLERS).
-( cd "$OUT_OBJ_DIR/chunks" && split -n "l/$WORKERS" -d -a 3 "$ALL_CLERS" chunk_ )
+# Use GNU split's -n l/N when available; otherwise compute chunk size
+# from line count for portability (BSD split on macOS lacks -n).
+W=$WORKERS
+if [ "$W" -gt "$n" ]; then W=$n; fi
+ABS_CLERS="$(cd "$(dirname "$ALL_CLERS")" && pwd)/$(basename "$ALL_CLERS")"
+if split --version >/dev/null 2>&1; then
+    ( cd "$OUT_OBJ_DIR/chunks" && split -n "l/$W" -d -a 3 "$ABS_CLERS" chunk_ )
+else
+    per=$(( (n + W - 1) / W ))
+    ( cd "$OUT_OBJ_DIR/chunks" && split -l "$per" -d -a 3 "$ABS_CLERS" chunk_ )
+fi
 
 {
     echo "host=$(hostname)"
@@ -82,13 +92,33 @@ export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
 CMD_TEMPLATE='%s --input-list {} --out-dir %s --objs-out-root %s/objs'
 printf "$CMD_TEMPLATE\n" "$EUCLID_LM_BIN" "$OUT_OBJ_DIR" "$OUT_OBJ_DIR" > "$OUT_OBJ_DIR/commands.txt"
 
-# Run.  GNU parallel; --will-cite suppresses the citation banner on doob.
-/usr/bin/time -v -o "$OUT_OBJ_DIR/run.stderr" \
-    parallel --nice "$NICE" -j "$WORKERS" --env OPENBLAS_NUM_THREADS --will-cite \
-        "$EUCLID_LM_BIN" --input-list {} \
+# Run.  Prefer GNU parallel + /usr/bin/time -v (doob); fall back to serial
+# loop when those aren't present (laptop smoke).
+if command -v parallel >/dev/null 2>&1; then
+    if /usr/bin/time -v true >/dev/null 2>&1; then
+        /usr/bin/time -v -o "$OUT_OBJ_DIR/run.stderr" \
+            parallel --nice "$NICE" -j "$WORKERS" --env OPENBLAS_NUM_THREADS --will-cite \
+                "$EUCLID_LM_BIN" --input-list {} \
+                    --out-dir "$OUT_OBJ_DIR" \
+                    --objs-out-root "$OUT_OBJ_DIR/objs" \
+                ::: "$OUT_OBJ_DIR"/chunks/chunk_*
+    else
+        parallel --nice "$NICE" -j "$WORKERS" --env OPENBLAS_NUM_THREADS --will-cite \
+            "$EUCLID_LM_BIN" --input-list {} \
+                --out-dir "$OUT_OBJ_DIR" \
+                --objs-out-root "$OUT_OBJ_DIR/objs" \
+            ::: "$OUT_OBJ_DIR"/chunks/chunk_* \
+            2> "$OUT_OBJ_DIR/run.stderr"
+    fi
+else
+    echo "[generate_objs] GNU parallel not found; running chunks serially (laptop smoke fallback)" >&2
+    : > "$OUT_OBJ_DIR/run.stderr"
+    for c in "$OUT_OBJ_DIR"/chunks/chunk_*; do
+        "$EUCLID_LM_BIN" --input-list "$c" \
             --out-dir "$OUT_OBJ_DIR" \
-            --objs-out-root "$OUT_OBJ_DIR/objs" \
-        ::: "$OUT_OBJ_DIR"/chunks/chunk_*
+            --objs-out-root "$OUT_OBJ_DIR/objs" 2>> "$OUT_OBJ_DIR/run.stderr"
+    done
+fi
 
 n_obj=$(find "$OUT_OBJ_DIR/objs" -type f -name '*.obj' | wc -l)
 echo "n_obj=$n_obj" >> "$OUT_OBJ_DIR/manifest.txt"

@@ -38,33 +38,31 @@ this reproducibility pipeline:
 |-----------------|---------------|-------------------------------------------------------|
 | clers           | tracked submodule | `git@github.com:peterdoyle1717/clers.git`           |
 | primegen        | tracked submodule | `https://github.com/peterdoyle1717/primegen.git`    |
-| euclid_lm       | NOT YET CLEAN     | currently at `~/Dropbox/neo/orchestrator/tools/euclid_oneshot/` (vendored, not a separate repo) |
+| euclid_lm       | tracked submodule | `~/Dropbox/neo/euclid_lm/` (extracted 2026-05-11 from `orchestrator/tools/euclid_oneshot/` working tree) |
 | euclid_prover   | tracked submodule | `git@github.com:peterdoyle1717/euclid_prover.git`   |
 
-## COMPONENT NOT YET CLEAN: euclid_lm
+## euclid_lm extraction (done 2026-05-11)
 
-- **Current path:** `~/Dropbox/neo/orchestrator/tools/euclid_oneshot/`
-- **What's there:** `src/euclid_oneshot.c`, `src/lm_march.c`, `src/euclid_prover_float.c`,
-  `src/euclid_check/*` (vendored from `~/Dropbox/neo/euclid_check/`), `Makefile`,
-  scripts (`run_doob_vrange.sh`, `molasses_chunk_worker.sh`,
-  `follow_molasses_when_objs_done.sh`), `docs/v4_50_run.md`, `data/failures_4_50*.tsv`.
-- **Why not a separate repo yet:** committed directly inside the orchestrator
-  (`13ef4fd Add euclid oneshot batch prover`).  Sources were originally drafted
-  in `~/Dropbox/neo/ideal/src/` (`oneshot_c.c`, `lm_march_c.c`,
-  `euclid_prover_float.c`) and copied verbatim into the orchestrator tree.  No
-  upstream git history of its own.
-- **Needed extraction:**
-  1. Create `peterdoyle1717/euclid_lm` repo (private OK for now).
-  2. Move `src/{euclid_oneshot.c, lm_march.c, euclid_prover_float.c}` and
-     vendored `src/euclid_check/` from the orchestrator into the new repo.
-  3. Bring the Makefile and the doob scripts along.
-  4. Pin the resulting commit here as `submodules/euclid_lm`.
+- **Source:** `~/Dropbox/neo/euclid_lm/`, initial commit `6acc811`.
+- **Origin:** extracted from `~/Dropbox/neo/orchestrator/tools/euclid_oneshot/`
+  **working tree** state on 2026-05-11 (not orchestrator HEAD `13ef4fd`, which
+  predates the `--objs-out-root` flag the reference run depended on).
 - **Provenance caveat for v=4..50 reference run.** The doob OBJ-generation
-  manifest records `git_rev_orchestrator=53b50c8` — which is the orchestrator
-  commit **before** `13ef4fd Add euclid oneshot batch prover`.  Sources used by
-  the run lived only in the working tree at launch time; they were committed
-  later as `13ef4fd`.  Once `euclid_lm` is extracted, its initial commit must
-  capture the **same source contents** that produced the reference data.
+  manifest records `git_rev_orchestrator=53b50c8` — which is even earlier than
+  `13ef4fd`.  Sources used by the run lived only in the orchestrator working
+  tree at launch time.  Files copied into `euclid_lm` are the working-tree
+  state as observed locally on 2026-05-11 — this is the closest captured
+  approximation; a doob-side `md5sum` of source files at the time of the
+  reference build would be needed to certify byte-equivalence.
+- **What was kept:** `src/euclid_oneshot.c`, `src/lm_march.c`,
+  `src/euclid_prover_float.c`, `src/euclid_check/*` (vendored), Makefile,
+  `scripts/run_doob_vrange.sh`, `docs/v4_50_run.md`.
+- **What was dropped (belongs elsewhere):**
+  - `data/failures_4_50*.tsv` — historical float-prover output; the pipeline
+    keeps the rigorous molasses failure list in `data/expected/v4_50/`.
+  - `scripts/{molasses_chunk_worker.sh, follow_molasses_when_objs_done.sh}` —
+    molasses orchestration lives in this repo's `scripts/`, not in the
+    solver.
 
 ## Realizer placement
 

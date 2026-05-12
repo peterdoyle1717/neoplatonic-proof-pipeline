@@ -15,9 +15,7 @@ The verified reference run is `v=4..50`. See
 
 - `submodules/clers`        — CLERS parser / canonicalizer (pinned)
 - `submodules/primegen`     — prime-net generator (pinned)
-- `submodules/euclid_lm`    — LM-sparse Euclidean solver + realizer
-                              (NOT YET CLEAN; see
-                              [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md))
+- `submodules/euclid_lm`    — LM-sparse Euclidean solver + in-process realizer (pinned)
 - `submodules/euclid_prover` — rigorous interval-arithmetic prover (pinned)
 
 ## Scope — intentionally excluded
@@ -52,7 +50,7 @@ runs/                   per-run output (gitignored)
 submodules/
   clers/                pinned
   primegen/             pinned
-  euclid_lm/            TODO — see docs/ARCHITECTURE.md
+  euclid_lm/            pinned (LM-sparse solver, extracted 2026-05-11)
   euclid_prover/        pinned
 ```
 
@@ -75,9 +73,14 @@ REJECT CLERS set in `data/expected/v4_50/molasses_official_lm_failures.tsv`.
 
 ## Status
 
-Skeleton, with one component (`euclid_lm`) not yet a clean submodule.
-The repo is not yet a working end-to-end runner. See
-`docs/ARCHITECTURE.md` for the open extraction TODO.
+All four submodules pinned and building.  End-to-end smoke on macOS
+(serial fallback when GNU parallel is absent) reproduces the v=4..50
+reference verdict on v8 CCCACACCAABE (rigorous REJECT, same
+failure_reason as the doob row).  Doob full-range runs are unchanged
+from the reference recipe — see `docs/REPRODUCE.md`.
+
+Remaining provenance items for Zenodo readiness are tracked in
+`docs/DOOB_RUN_NOTES.md` (prover source-identity check).
 
 ## License
 

@@ -7,3 +7,6 @@
 [submodule "submodules/euclid_prover"]
 	path = submodules/euclid_prover
 	url = ../euclid_prover
+[submodule "submodules/euclid_lm"]
+	path = submodules/euclid_lm
+	url = ../euclid_lm

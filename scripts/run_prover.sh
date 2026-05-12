@@ -64,17 +64,40 @@ n=$(wc -l < "$INPUT")
     echo "pipeline_commit=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 } > "$OUT/manifest.txt"
 
-( cd "$OUT/chunks" && split -n "l/$WORKERS" -d -a 3 "$INPUT" chunk_ )
+W=$WORKERS
+if [ "$W" -gt "$n" ]; then W=$n; fi
+ABS_INPUT="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
+if split --version >/dev/null 2>&1; then
+    ( cd "$OUT/chunks" && split -n "l/$W" -d -a 3 "$ABS_INPUT" chunk_ )
+else
+    per=$(( (n + W - 1) / W ))
+    ( cd "$OUT/chunks" && split -l "$per" -d -a 3 "$ABS_INPUT" chunk_ )
+fi
 
 WORKER="$ROOT/scripts/_molasses_chunk_worker.sh"
 [ -x "$WORKER" ] || chmod +x "$WORKER"
 
 echo "$WORKER {CHUNK} $OUT/parts $OUT/logs $PROVER" > "$OUT/commands.txt"
 
-/usr/bin/time -v -o "$OUT/run.stderr" \
-    parallel --nice "$NICE" -j "$WORKERS" --will-cite \
-        "$WORKER {} $OUT/parts $OUT/logs $PROVER" \
-        ::: "$OUT"/chunks/chunk_*
+if command -v parallel >/dev/null 2>&1; then
+    if /usr/bin/time -v true >/dev/null 2>&1; then
+        /usr/bin/time -v -o "$OUT/run.stderr" \
+            parallel --nice "$NICE" -j "$WORKERS" --will-cite \
+                "$WORKER {} $OUT/parts $OUT/logs $PROVER" \
+                ::: "$OUT"/chunks/chunk_*
+    else
+        parallel --nice "$NICE" -j "$WORKERS" --will-cite \
+            "$WORKER {} $OUT/parts $OUT/logs $PROVER" \
+            ::: "$OUT"/chunks/chunk_* \
+            2> "$OUT/run.stderr"
+    fi
+else
+    echo "[run_prover] GNU parallel not found; running chunks serially (laptop smoke fallback)" >&2
+    : > "$OUT/run.stderr"
+    for c in "$OUT"/chunks/chunk_*; do
+        "$WORKER" "$c" "$OUT/parts" "$OUT/logs" "$PROVER" 2>> "$OUT/run.stderr"
+    done
+fi
 
 ACCEPT=$(awk -F'\t' '$4=="ACCEPT"' "$OUT"/parts/*.tsv 2>/dev/null | wc -l)
 REJECT=$(awk -F'\t' '$4=="REJECT"' "$OUT"/parts/*.tsv 2>/dev/null | wc -l)
