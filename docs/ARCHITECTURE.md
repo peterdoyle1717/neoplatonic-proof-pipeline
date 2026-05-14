@@ -1,113 +1,81 @@
 # Architecture
 
-## Stable reproducibility route
+The pipeline is a four-stage chain:
 
 ```
-primegen                  → prime CLERS list for v in [vmin, vmax]
-clers                     → face-list decode (called inline by euclid_lm)
-euclid_lm                 → LM-sparse solve + realize (in-process per chunk)
-                            output: one OBJ per CLERS
-euclid_prover (molasses)  → rigorous interval-arithmetic verdict per OBJ
-                            output: TSV row, log on REJECT
-collect_failures.sh       → failures.tsv (REJECT rows only)
+primegen           submodules/primegen
+   v -> CLERS list per v
+   |
+clers decode       submodules/clers
+   CLERS line -> netcode (face list "a,b,c;...")
+   |
+euclid pipeline    euclid/
+   (a) euclid_check --netcodes  combinatorial topology gate
+   (b) euclid_clean --batch     LM-with-dent-gate solve + realize -> OBJ
+   (c) euclid_check --objs      OBJ topology gate
+   (d) euclid_prover --batch    rigorous interval-arithmetic verdict
+   |
+collect_failures   scripts/collect_failures.sh
+   joins solver+prover manifests by OBJ path,
+   emits v <TAB> clers <TAB> verdict <TAB> message
 ```
 
-The boundary between stages is plain files: TSVs of CLERS strings, then
-directories of OBJ files, then TSVs of `<CLERS, verdict>` rows.  Each
-stage runs as a chunked C binary or as a chunked shell driver around a
-per-OBJ binary; no per-CLERS Python interpreters in any hot loop.
+## Contract per stage
 
-## Non-included routes
+**primegen**: per-v CLERS lists at `OUT/primes/v{V}.txt`. Empty file
+allowed (v=5 has no primes).
 
-The following exist elsewhere in `~/Dropbox/neo/` but are **not** part of
-this reproducibility pipeline:
+**clers decode**: stdin one CLERS per line, stdout one netcode per
+line. Bulk decode in a single process.
 
-| Path | Why excluded |
-|---|---|
-| `~/Dropbox/neo/ideal/`          | research repo for ideal hyperbolic horoball packings and the bracket-existence proof. Its OBJ-producing scripts (`puffup_c`, `hyperpuff_c`, `lm_march_c`) are upstream of the LM-sparse work but the reproducibility run uses the orchestrator's `euclid_oneshot` binary, not `ideal/src` directly. |
-| `~/Dropbox/neo/homotopy_stage/` | alternative Euclidean realizer (`puffup_c`, α=0→π/3 homotopy). Documented as a peer route but not used for v=4..50. |
-| oneshot float prover            | `euclid_oneshot` has a fast nonrigorous interval-stripped prover mode that runs in-memory after the LM solve.  It is used for triage, not for the rigorous proof of record. |
-| `~/Dropbox/neo/euclid_approver/` | catalog of approved floppers / atom fusion. Bootstrap; not yet usable. |
-| MMA preprover                   | `euclid_prover/mma_preprover/` — precision-needs estimator, not a certifier. |
-| atlas generation                | publication site; orthogonal to reproducibility. |
-| `~/Dropbox/neo/undented/`       | publication-target standalone build of the whole pipeline.  Different toolchain (neoeuc_c) — not what produced the v=4..50 reference data. |
+**euclid_clean**: input netcode, output OBJ with vertex coordinates in
+`%.17f` fixed-point (no scientific notation). LM iterates with
+adaptive damping and a dent gate that rejects any trial step where
+some vertex's flower sum of bends is negative. Realize is BFS from
+face 0 in the standard gauge `V[b0]=(0,0,0.5), V[b1]=(0,0,-0.5),
+V[b2]=(sqrt(3)/2,0,0)`.
 
-## Component table
+**euclid_check**: combinatorial sanity. Triangulated sphere, Euler
+characteristic 2, single-cycle oriented link at every vertex, no
+duplicate directed edges. Pre-filters bad CLERS before the solver and
+bad OBJs before the prover.
 
-| Component       | Pinned commit | Upstream                                              |
-|-----------------|---------------|-------------------------------------------------------|
-| clers           | tracked submodule | `git@github.com:peterdoyle1717/clers.git`           |
-| primegen        | tracked submodule | `https://github.com/peterdoyle1717/primegen.git`    |
-| euclid_lm       | tracked submodule | `~/Dropbox/neo/euclid_lm/` (extracted 2026-05-11 from `orchestrator/tools/euclid_oneshot/` working tree) |
-| euclid_prover   | tracked submodule | `git@github.com:peterdoyle1717/euclid_prover.git`   |
+**euclid_prover**: three certificates, each via interval arithmetic
+with `nextafter`-based directed rounding (do NOT compile with
+`-ffast-math`):
 
-## euclid_lm extraction (done 2026-05-11)
+  * EXISTENCE  -- `rho_upper < sigma_lower^2 / (16 sqrt E)`.
+  * EMBEDDING  -- `sqrt(V) * motion_upper < collision_lower`.
+  * UNDENTED   -- `sin(T/2) > 0` at every vertex link.
 
-- **Source repo:** `~/Dropbox/neo/euclid_lm/`.  Pipeline submodule pin
-  follows that repo's `main` branch.
-- **Origin:** extracted from `~/Dropbox/neo/orchestrator/tools/euclid_oneshot/`
-  **working tree** state on 2026-05-11 (not orchestrator HEAD `13ef4fd`,
-  which predates the `--objs-out-root` flag the reference run depended on).
-- **Wholesale, not minimal.** The extraction copies the orchestrator's
-  full working-tree contents verbatim (LM solver + in-memory check +
-  float-prover triage path).  Binary name kept as `bin/euclid_oneshot`
-  (the original).  CLI: `--input-list FILE --out-dir DIR [--chunk-id NAME]
-  [--objs-out-root DIR]`.  In `--objs-out-root` mode the binary writes
-  the OBJ and returns before the check/prover stages, so they are dead
-  code in the pipeline's use of the binary; we kept them anyway for
-  source fidelity to what doob actually compiled.
-- **Provenance caveat for v=4..50 reference run.** The doob OBJ-generation
-  manifest records `git_rev_orchestrator=53b50c8` — earlier than `13ef4fd`.
-  Sources used by the run lived only in the orchestrator working tree at
-  launch time, which is what we copied.  A doob-side `md5sum` of
-  orchestrator source files at the time of the reference build would be
-  needed to certify byte-equivalence to the production binary's source.
-- **What was dropped (belongs elsewhere):**
-  - `data/failures_4_50*.tsv` — historical float-prover output; the
-    pipeline keeps the rigorous molasses failure list in
-    `data/expected/v4_50/`.
-  - `scripts/{molasses_chunk_worker.sh, follow_molasses_when_objs_done.sh}`
-    — molasses orchestration belongs in this repo's `scripts/`, not in
-    the solver.
+ACCEPT iff all three pass.
 
-  Source-level contents (LM solver + check vendored + float-prover) are
-  preserved verbatim from the orchestrator working tree.
+## Batch contract
 
-## Realizer placement
+Both solver and prover support a `--batch --outdir DIR` mode that
+reads one item per line from stdin and emits one manifest row per
+input line on stdout:
 
-`~/Dropbox/neo/euclid_realize/` is a separate clean repo intended as the
-canonical bends→OBJ writer (its `README.md` declares the unified-route
-contract: `solver --bends-out → puffup-bends 1 → euclid_realize → OBJ →
-euclid_check`).  The v=4..50 reference run did **not** use it — the realize
-step ran inline inside `euclid_oneshot`.  Per the reproducibility rule
-(include the realizer only if it's separately used), it is **not** a submodule
-here.  When `euclid_lm` is extracted, the inline realize logic stays inside
-it, mirroring what was actually run.
+```
+solver:   index  ok|fail              netcode  objpath        message
+prover:   index  accept|reject|fail   objpath  reportpath     message
+```
 
-## Prover provenance
+Per-item output files use temp-then-rename for atomic writes. File
+names are `n{index:08d}_{fnv64hash:016x}.{obj,report}`; the manifest
+is the canonical CLERS-↔-output mapping.
 
-- Reference doob binary: `/home/doyle/neo/ideal/src/euclid_prover` with
-  `prover_md5=e376582e604a39b57291c40609d48f5f` (recorded in molasses
-  `manifest.txt`).
-- This binary was built from doob's mirror of `~/Dropbox/neo/ideal/` —
-  i.e. from `ideal/src/euclid_prover.c`, **not** from the extracted
-  `~/Dropbox/neo/euclid_prover/` repo.
-- Verification TODO: confirm that `ideal/src/euclid_prover.c` at the
-  doob-build commit is byte-identical to `~/Dropbox/neo/euclid_prover/src/euclid_prover.c`
-  at `8a11dfa` (current `main`).  If they agree, `submodules/euclid_prover`
-  is a faithful pin for reproducibility.  If they diverge, record which
-  source corresponds to the reference run.
+## Sharding
 
-## Speed discipline
+`euclid/run_parallel_template.sh` shards stdin round-robin across
+SHARDS files and runs them under GNU parallel (`-j JOBS`). Falls back
+to a serial loop if `parallel` is not on PATH.
 
-This repo inherits the project rules from
-`~/Dropbox/neo/CLAUDE.md`:
+`BLAS_THREADS=1` is exported by default so the solver's LAPACK calls
+don't oversubscribe under parallel.
 
-- no per-CLERS OS-process spawning in any sweep,
-- chunked C binaries with SuperLU for the LM solve,
-- doob runs at `nice -n 19`, up to 96 workers,
-- no Python interpreter in a sweep's hot loop,
-- the per-OBJ rigorous prover is one process per OBJ (it does not support a
-  chunked mode), so molasses uses a chunked shell **worker** that amortises
-  the process cost across many OBJs in one bash process (see
-  `scripts/run_prover.sh`).
+## What's not in this repo
+
+Anything not on the reproducibility path. No homotopy/ideal solvers,
+no MMA experiments, no atlas, no approver/catalog work. Those live in
+separate repos.

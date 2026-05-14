@@ -1,88 +1,68 @@
 # neoplatonic-proof-pipeline
 
-This repo reproduces the neoplatonic existence computation for a requested
-vertex range. It pins the exact components used to:
+Reproduce the neoplatonic existence computation for a vertex range
+v=VMIN..VMAX. Four stages:
 
-1. generate the prime CLERS/net list,
-2. generate official Euclidean OBJs using the LM-sparse solver,
-3. run the rigorous `euclid_prover` (the "molasses" run),
-4. collect the raw failure list.
+1. **prime CLERS list**     — `submodules/primegen` (recurrence: grow + base seeds)
+2. **decode CLERS → netcode** — `submodules/clers`
+3. **solve + realize + prove** — `euclid/` (three single-file C programs)
+4. **collect failures**     — `v <TAB> clers <TAB> verdict <TAB> message`
 
-The verified reference run is `v=4..50`. See
-[`data/expected/v4_50/`](data/expected/v4_50/).
+The verified reference run is `v=4..50` (8,239,684 cases). The
+canonical failure list is in [`data/expected/v4_50/`](data/expected/v4_50/).
 
-## Scope — included
-
-- `submodules/clers`        — CLERS parser / canonicalizer (pinned)
-- `submodules/primegen`     — prime-net generator (pinned)
-- `submodules/euclid_lm`    — LM-sparse Euclidean solver + in-process realizer (pinned)
-- `submodules/euclid_prover` — rigorous interval-arithmetic prover (pinned)
-
-## Scope — intentionally excluded
-
-- `ideal/`            — separate research repo for ideal hyperbolic
-                        realization / bracket proofs. Not on the
-                        reproducibility path.
-- `homotopy_stage/`   — alternative Euclidean route (puffup_c). Not used
-                        for the v=4..50 reference run.
-- experimental oneshot float prover    (nonrigorous discovery/triage)
-- `euclid_approver/` and fusion work   (atom catalog, not yet usable)
-- atlas generation, MMA preprover, undented standalone publication target
-
-## Top-level layout
+## Layout
 
 ```
 README.md
 docs/
-  ARCHITECTURE.md       pipeline contract and excluded routes
-  REPRODUCE.md          how to run for an arbitrary v range
-  DOOB_RUN_NOTES.md     v=4..50 run provenance (paths, counts, hashes)
+  ARCHITECTURE.md   pipeline contract
+  REPRODUCE.md      how to run an arbitrary range
 scripts/
-  build_all.sh          build pinned submodule binaries
-  generate_primes.sh    primegen + clers → primes.tsv
-  generate_objs.sh      primes.tsv → official LM-sparse OBJs
-  run_prover.sh         OBJ dir → rigorous prover verdicts
-  collect_failures.sh   verdict TSV → failures.tsv (REJECT only)
-  reproduce_range.sh    one-shot driver: vmin vmax outdir
-data/expected/
-  v4_50/                committed audit + 532-row failure list
-runs/                   per-run output (gitignored)
+  build_all.sh      builds clers, primegen, and euclid/
+  generate_primes.sh   primegen → CLERS lists per v
+  collect_failures.sh  euclid manifests → failures.tsv (CLERS-keyed)
+  reproduce_range.sh   one-shot driver: VMIN VMAX OUT_DIR
+data/expected/v4_50/   committed reference failure list
+euclid/
+  euclid_clean.c    LM-with-dent-gate solver + realizer
+  euclid_prover.c   certified interval-arithmetic prover
+  euclid_check.c    combinatorial topology checker
+  Makefile          builds all three
+  run_parallel_template.sh   batch driver with JOBS/SHARDS/NICE/BLAS_THREADS knobs
+  README.md         usage
 submodules/
-  clers/                pinned
-  primegen/             pinned
-  euclid_lm/            pinned (LM-sparse solver, extracted 2026-05-11)
-  euclid_prover/        pinned
+  clers/            CLERS encoder/decoder (pinned)
+  primegen/         prime-net generator (pinned)
+runs/               per-run output (gitignored)
 ```
 
-## How to reproduce
-
-Pick a vertex range and an output dir, then:
+## Reproduce
 
 ```sh
 scripts/build_all.sh
 scripts/reproduce_range.sh 4 50 runs/v4_50
 ```
 
-On doob the same driver applies, but you should run inside `nohup` and
-the script will use `nice -n 19` and 96 workers automatically (see
-`REPRODUCE.md`).
+`reproduce_range.sh` runs each phase in turn, leaves intermediate
+output under `OUT_DIR/`, and finally writes `OUT_DIR/failures.tsv`. If
+the requested range overlaps the committed `v4_50` reference, it also
+writes `OUT_DIR/compare.txt` with `compare=PASS|FAIL` based on a
+CLERS-level set match.
 
-The reference v=4..50 run produced 8,239,684 OBJs, 8,239,684 rigorous
-verdicts, 8,239,152 ACCEPT, 532 REJECT.  Reproducing should match the
-REJECT CLERS set in `data/expected/v4_50/molasses_official_lm_failures.tsv`.
+Env knobs (all optional, forwarded to the euclid runner):
 
-## Status
+```
+JOBS           parallel worker count           (default 4)
+SHARDS         shard count                      (default 4*JOBS)
+NICE           nice level; 0 disables           (default 0)
+BLAS_THREADS   per-process BLAS cap             (default 1)
+```
 
-All four submodules pinned and building.  End-to-end smoke on macOS
-(serial fallback when GNU parallel is absent) reproduces the v=4..50
-reference verdict on v8 CCCACACCAABE (rigorous REJECT, same
-failure_reason as the doob row).  Doob full-range runs are unchanged
-from the reference recipe — see `docs/REPRODUCE.md`.
-
-Remaining provenance items for Zenodo readiness are tracked in
-`docs/DOOB_RUN_NOTES.md` (prover source-identity check).
+No host-specific defaults. For a parallel run on a workstation, set
+`JOBS=<n_cores> NICE=19` at invocation. For a laptop smoke test, the
+defaults suffice.
 
 ## License
 
-MIT for orchestration code in this repo. Each submodule keeps its own
-license.
+MIT.

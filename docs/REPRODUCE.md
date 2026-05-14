@@ -1,82 +1,63 @@
-# Reproducing a vertex range
-
-## Prerequisites
-
-- C compiler, GNU make, GNU parallel.
-- SuperLU, BLAS (OpenBLAS recommended), LAPACK headers + libs.
-  - macOS: `brew install superlu` for SuperLU; BLAS/LAPACK via Accelerate.
-  - Debian/Ubuntu: `apt install libsuperlu-dev libopenblas-dev liblapack-dev`.
-- `euclid_lm` is a tracked submodule; `make -C submodules/euclid_lm`
-  builds `submodules/euclid_lm/bin/euclid_oneshot` (the wholesale
-  binary; the submodule's repo name is `euclid_lm`).
-
-## Quick path
+# Reproducing a run
 
 ```sh
-git clone --recursive <this-repo>
+git clone --recurse-submodules https://github.com/peterdoyle1717/neoplatonic-proof-pipeline.git
 cd neoplatonic-proof-pipeline
-scripts/build_all.sh
-scripts/reproduce_range.sh VMIN VMAX OUTDIR
+./scripts/build_all.sh
+./scripts/reproduce_range.sh 4 20 runs/v4_20
 ```
 
-Example for v=4..10 smoke:
+That's it. `reproduce_range.sh` runs four phases:
+
+1. **primegen**     -> `runs/v4_20/primes/v{V}.txt` (CLERS per v).
+2. **clers decode** -> `runs/v4_20/netcodes.txt`.
+3. **euclid**       -> `runs/v4_20/euclid/{checkmanifest,solverout,solvermanifest,proverout,provermanifest,...}/`.
+4. **collect**      -> `runs/v4_20/failures.tsv` (one row per non-accept verdict, CLERS-keyed).
+
+If the requested range overlaps the committed reference v=4..50, it
+also writes `runs/v4_20/compare.txt`:
+
+```
+compare_range=v4..v20
+expected_failures=14
+produced_failures=14
+common=14
+only_in_expected=0
+only_in_produced=0
+compare=PASS
+```
+
+## Tuning
 
 ```sh
-scripts/reproduce_range.sh 4 10 runs/v4_10
+JOBS=96 NICE=19 BLAS_THREADS=1 ./scripts/reproduce_range.sh 4 50 runs/v4_50
 ```
 
-Example for full v=4..50 reference:
+Reasonable defaults on a workstation. No host-specific code paths;
+nothing wired in by default.
 
-```sh
-NEO_WORKERS=96 NEO_NICE=19 scripts/reproduce_range.sh 4 50 runs/v4_50
+## Requirements
+
+- C11 compiler, `make`, `awk`, `sort`, `join`, `paste`.
+- LAPACK + BLAS (linker flags `-llapack -lblas`). On macOS the
+  Makefile uses `-framework Accelerate` instead.
+- `GNU parallel` (optional; the runner falls back to a serial loop).
+- Disk space scales with v. v=4..50 produces about 40 GB of OBJs and
+  another ~5 GB of prover reports. v=4..20 is < 100 MB.
+
+## Re-running from intermediate state
+
+`reproduce_range.sh` skips primegen and clers-decode if their output
+already exists. To force a re-run, delete the corresponding directory
+or file under `OUT_DIR` before invoking.
+
+## Expected verdict counts
+
+For the committed reference range:
+
+```
+v=4..50    8,239,684 cases    8,239,152 accept    532 reject
 ```
 
-## Stage-by-stage
-
-```
-scripts/generate_primes.sh VMIN VMAX OUT_PRIMES_DIR
-scripts/generate_objs.sh    OUT_PRIMES_DIR OUT_OBJ_DIR
-scripts/run_prover.sh       OUT_OBJ_DIR OUT_PROVER_DIR
-scripts/collect_failures.sh OUT_PROVER_DIR/parts OUT_FAILURES_TSV
-```
-
-Each script:
-
-- exits non-zero on first error,
-- writes `commands.txt` and a provenance manifest beside its output,
-- uses `nice -n "${NEO_NICE:-19}"` on doob-style parallel runs,
-- uses `OPENBLAS_NUM_THREADS=1` per worker,
-- never spawns one OS process per CLERS for large generation.
-
-## Environment knobs
-
-| Variable               | Default | Meaning |
-|------------------------|---------|---------|
-| `NEO_WORKERS`          | 96 on doob, `nproc/2` on laptops | parallel worker count |
-| `NEO_NICE`             | 19 on doob, unset on laptop | `nice -n` level |
-| `OPENBLAS_NUM_THREADS` | 1       | BLAS thread oversubscription guard |
-| `EUCLID_LM_BIN`        | `submodules/euclid_lm/bin/euclid_oneshot` | path to the wholesale euclid_lm binary |
-| `EUCLID_PROVER_BIN`    | `submodules/euclid_prover/src/euclid_prover` | path to the rigorous prover |
-
-## doob notes
-
-- VPN must be active.
-- Use `doob.dartmouth.edu`, not the `doob` alias.
-- Place the runs under `/tmp/<run>` or `~/neo/data/<run>` per the standing
-  rule that production runs save output on doob, not the laptop.
-- The molasses stage runs many hours on v=4..50 (≈ 38h wall on 96 cores at
-  `nice 19`).  Run inside `nohup`.
-
-## Comparing your reproduction to the v=4..50 reference
-
-After your run completes, the failure CLERS sets should match:
-
-```sh
-diff \
-  <(awk -F'\t' 'NR>6{print $1"\t"$2}' runs/v4_50/failures.tsv | sort) \
-  <(awk -F'\t' 'NR>6{print $1"\t"$2}' data/expected/v4_50/molasses_official_lm_failures.tsv | sort)
-```
-
-Exact-match on `v` and `CLERS` columns is the success criterion.  The
-`obj_path` column will differ because it embeds run-specific dirs; that
-column is informational, not part of the comparison.
+The 532-row reject list is at
+`data/expected/v4_50/molasses_official_lm_failures.tsv`.

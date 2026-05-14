@@ -1,36 +1,52 @@
-#!/usr/bin/env bash
-# collect_failures.sh — assemble a single failures.tsv from prover output.
+#!/bin/sh
+# collect_failures.sh EUCLID_OUTDIR CLERS_BIN > failures.tsv
 #
-# Usage:
-#   collect_failures.sh PARTS_DIR OUT_FAILURES_TSV
+# Joins solver and prover manifests by OBJ path, filters to non-accept
+# verdicts, and emits one tab-separated row per failure in the form
 #
-# Reads PARTS_DIR/*.tsv (the per-chunk prover output produced by
-# run_prover.sh), keeps rows with status != ACCEPT, and writes them to
-# OUT_FAILURES_TSV with a header.  Schema:
+#   v <TAB> clers <TAB> verdict <TAB> message
 #
-#   v   clers   obj_path   molasses_status   failure_reason
-#   stdout_path   stderr_path
+# `clers` is the canonical CLERS name for the failed netcode, obtained
+# by piping all failed netcodes through `<clers_bin> name`. `v` is the
+# vertex count, read off the netcode by taking the max vertex id.
 
 set -eu
 
-if [ $# -ne 2 ]; then
-    echo "usage: $0 PARTS_DIR OUT_FAILURES_TSV" >&2
-    exit 2
-fi
+EUCLID=${1:?"usage: $0 EUCLID_OUTDIR CLERS_BIN"}
+CLERS=${2:?"usage: $0 EUCLID_OUTDIR CLERS_BIN"}
 
-PARTS_DIR="$1"; OUT="$2"
-[ -d "$PARTS_DIR" ] || { echo "[collect_failures] no parts dir: $PARTS_DIR" >&2; exit 2; }
+SOLVER=$EUCLID/solvermanifest/all.tsv
+PROVER=$EUCLID/provermanifest/all.tsv
+[ -f "$SOLVER" ] || { echo "missing $SOLVER" >&2; exit 1; }
+[ -f "$PROVER" ] || { echo "missing $PROVER" >&2; exit 1; }
 
-OUT_DIR=$(dirname "$OUT")
-mkdir -p "$OUT_DIR"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-{
-    printf '# molasses failure list (rigorous prover output)\n'
-    printf '# generated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '# source: %s\n' "$PARTS_DIR"
-    printf 'v\tclers\tobj_path\tmolasses_status\tfailure_reason\tstdout_path\tstderr_path\n'
-    awk -F'\t' -v OFS='\t' '$4 != "ACCEPT" { print $1, $2, $3, $4, $8, $6, $7 }' "$PARTS_DIR"/*.tsv
-} > "$OUT"
+# Solver row:  idx ok netcode objpath msg     -> key on column 4
+# Prover row:  idx verdict objpath reportpath msg -> key on column 3
+sort -t"$(printf '\t')" -k4 "$SOLVER" > "$TMP/solver.sorted"
+sort -t"$(printf '\t')" -k3 "$PROVER" > "$TMP/prover.sorted"
 
-n=$(awk -F'\t' '!/^#/ && NR>1' "$OUT" | wc -l)
-echo "[collect_failures] wrote $n failure rows to $OUT" >&2
+join -t"$(printf '\t')" -1 4 -2 3 \
+    -o 0,1.1,1.2,1.3,1.5,2.1,2.2,2.4,2.5 \
+    "$TMP/solver.sorted" "$TMP/prover.sorted" > "$TMP/joined.tsv"
+
+# Filter non-accept; netcode=$4, verdict=$7, prover-msg=$9.
+awk -F"$(printf '\t')" '$7 != "accept" { print $4 "\t" $7 "\t" $9 }' \
+    "$TMP/joined.tsv" > "$TMP/failed.tsv"
+
+# Canonical CLERS name from each failed netcode (single bulk subprocess).
+cut -f1 "$TMP/failed.tsv" | "$CLERS" name > "$TMP/failed.clers"
+
+# v = max vertex id in each netcode.
+awk -F"$(printf '\t')" '{
+    n = split($1, parts, /[,;]/)
+    vmax = 0
+    for (i = 1; i <= n; i++) if (parts[i] + 0 > vmax) vmax = parts[i] + 0
+    print vmax
+}' "$TMP/failed.tsv" > "$TMP/failed.v"
+
+paste "$TMP/failed.v" "$TMP/failed.clers" "$TMP/failed.tsv" \
+    | awk -F"$(printf '\t')" '{ print $1 "\t" $2 "\t" $4 "\t" $5 }' \
+    | sort -k1,1n -k2,2
